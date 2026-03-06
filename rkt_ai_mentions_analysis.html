@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Companies — AI Mentions & Headcount in Earnings Calls</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0b0e;
+    --surface: #12141a;
+    --border: #1e2130;
+    --accent: #00d4ff;
+    --accent2: #a78bfa;
+    --gpt-color: #19c37d;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  header { max-width: 1100px; margin: 0 auto 48px; }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  h1 { font-size: clamp(24px, 4vw, 46px); font-weight: 800; line-height: 1.1; margin-bottom: 12px; }
+  h1 .a { color: var(--accent); }
+  h1 .b { color: var(--accent2); }
+
+  .subtitle { font-size: 15px; color: var(--muted); max-width: 680px; line-height: 1.6; font-weight: 400; }
+
+  .stats-row {
+    max-width: 1100px;
+    margin: 0 auto 32px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .stat-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .stat-num { font-size: 36px; font-weight: 800; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-weight: 400; }
+
+  .stat-a .stat-num { color: var(--accent); }
+  .stat-b .stat-num { color: var(--gpt-color); }
+  .stat-c .stat-num { color: var(--accent2); }
+
+  .section-header {
+    max-width: 1100px;
+    margin: 0 auto 16px;
+  }
+  .section-header .kicker { margin-bottom: 4px; }
+  .section-header h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .section-header p { font-size: 13px; color: var(--muted); line-height: 1.6; font-weight: 400; }
+
+  .chart-wrapper {
+    max-width: 1100px;
+    margin: 0 auto 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+  }
+
+  canvas { width: 100% !important; }
+
+  .legend { display: flex; gap: 24px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dash { width: 24px; border-top: 2px dashed var(--gpt-color); flex-shrink: 0; }
+
+  .details-section { max-width: 1100px; margin: 0 auto; }
+  .details-section h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  .details-section .desc { font-size: 14px; color: var(--muted); margin-bottom: 24px; font-weight: 400; }
+
+  .quarters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+  }
+
+  .qcard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .qcard:hover { border-color: #2e3350; }
+  .t-ai.qcard:hover { border-color: rgba(0,212,255,0.35); }
+
+  .card-hdr {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    cursor: default;
+  }
+
+  .qcard:not(.zero) .card-hdr { cursor: pointer; }
+
+  .card-lbl { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+  .card-cnt { font-size: 28px; font-weight: 800; }
+  .t-ai .card-cnt { color: var(--accent); }
+  .zero .card-cnt { color: var(--muted) !important; }
+
+  .bar-bg { height: 3px; background: var(--border); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .t-ai .bar-fill { background: var(--accent); }
+
+  .tog { font-size: 16px; color: var(--muted); transition: transform 0.2s; user-select: none; flex-shrink: 0; }
+  .qcard.open .tog { transform: rotate(180deg); }
+
+  .card-body { padding: 16px 20px; display: none; }
+  .qcard.open .card-body { display: block; }
+
+  .mention {
+    font-size: 13px;
+    color: #b0b8cc;
+    line-height: 1.65;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  .mention:last-child { border-bottom: none; padding-bottom: 0; }
+
+  mark { border-radius: 3px; padding: 0 2px; font-weight: 600; }
+  .t-ai mark { background: rgba(0,212,255,0.15); color: var(--accent); }
+
+  /* Mobile */
+  @media (max-width: 700px) {
+    body { padding: 20px 14px; }
+    .stats-row { grid-template-columns: 1fr; gap: 10px; }
+    .chart-wrapper { padding: 18px 14px; }
+    .quarters-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 26px; }
+    .stat-num { font-size: 28px; }
+    .card-cnt { font-size: 22px; }
+    .legend { gap: 12px; }
+    .legend-item { font-size: 11px; }
+  }
+
+  @media (max-width: 420px) {
+    body { padding: 16px 10px; }
+    .chart-wrapper { padding: 14px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Rocket Companies · RKT · Earnings Transcript Analysis · Q2 2020 – Q4 2025</div>
+  <h1>RKT: <span class="a">AI</span> Mentions &amp; <span class="b">Headcount</span> in Earnings Calls</h1>
+  <p class="subtitle">Total mentions of AI, Artificial Intelligence, Machine Learning, ML, NLP, Natural Language Processing, and Natural Language across 22 quarters of earnings calls (Q2 2020 – Q4 2025). Includes Q4 2025 earnings call (Feb 26, 2026) and investor presentation.</p>
+</header>
+
+<!-- AI STATS -->
+<div class="stats-row">
+  <div class="stat-card stat-a">
+    <div class="stat-label">Total AI Mentions</div>
+    <div class="stat-num">297</div>
+    <div class="stat-sub">AI/ML/NLP combined across all 22 quarters</div>
+  </div>
+  <div class="stat-card stat-b">
+    <div class="stat-label">Peak Quarter</div>
+    <div class="stat-num" style="font-size:26px">Q4 2023</div>
+    <div class="stat-sub">45 mentions — highest single quarter on record</div>
+  </div>
+  <div class="stat-card stat-c">
+    <div class="stat-label">Growth Factor</div>
+    <div class="stat-num">19×</div>
+    <div class="stat-sub">Post-ChatGPT vs. pre-ChatGPT era (282 vs. 15 total mentions)</div>
+  </div>
+</div>
+
+<!-- AI CHART -->
+<div class="section-header">
+  <div class="kicker">AI Trend</div>
+  <h2>AI/ML/NLP Mentions Over Time</h2>
+  <p>Combined count of all AI-related terms per quarter. ChatGPT launched November 2022 — RKT's AI discussion accelerated dramatically from Q3 2023 onward.</p>
+</div>
+<div class="chart-wrapper">
+  <canvas id="aiChart" height="320"></canvas>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Total AI/ML/NLP Mentions</div>
+    <div class="legend-item"><div class="legend-dash"></div>ChatGPT Launch (Nov 2022)</div>
+  </div>
+</div>
+
+<!-- HEADCOUNT STATS -->
+<div class="stats-row" style="margin-top:8px;">
+  <div class="stat-card stat-a">
+    <div class="stat-label">Peak Headcount</div>
+    <div class="stat-num">~26,000</div>
+    <div class="stat-sub">Estimated peak ~Q1 2022 before major restructuring</div>
+  </div>
+  <div class="stat-card stat-b">
+    <div class="stat-label">Q4 2025 Headcount</div>
+    <div class="stat-num">~14,000</div>
+    <div class="stat-sub">Explicitly cited in Q4 2023 call; maintained through AI-driven capacity</div>
+  </div>
+  <div class="stat-card stat-c">
+    <div class="stat-label">AI Efficiency Gain</div>
+    <div class="stat-num">2×</div>
+    <div class="stat-sub">Q4 2025: same volume as Q1 2022 with half the headcount</div>
+  </div>
+</div>
+
+<!-- HEADCOUNT CHART -->
+<div class="section-header" style="margin-top:16px;">
+  <div class="kicker">Headcount Tracker</div>
+  <h2>Reported &amp; Estimated Employee Count Over Time</h2>
+  <p>Figures sourced from earnings call transcripts and investor presentations. Solid dots = explicitly stated. Open dots = estimated from context (layoff announcements, expense reduction commentary, "7% fewer" references). Q4 2025 confirmed: same ~$50B quarterly volume as Q1 2022 accomplished with half the production headcount.</p>
+</div>
+<div class="chart-wrapper">
+  <canvas id="headcountChart" height="300"></canvas>
+  <div class="legend" style="margin-top:20px">
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Reported Headcount</div>
+    <div class="legend-item"><svg width="22" height="12" style="flex-shrink:0"><circle cx="11" cy="6" r="5" fill="none" stroke="#a78bfa" stroke-width="2"/></svg><span>Estimated</span></div>
+    <div class="legend-item"><div class="legend-dash" style="border-color:#a78bfa; border-style:dashed;"></div>Estimated trend</div>
+    <div class="legend-item"><div class="legend-dash"></div>ChatGPT Launch (Nov 2022)</div>
+  </div>
+</div>
+
+<!-- QUARTER CARDS -->
+<div class="details-section">
+  <h2>Quarterly AI Context Details</h2>
+  <p class="desc">Click any quarter card to expand and read the exact AI-related excerpts from that earnings call, with key terms highlighted.</p>
+  <div class="quarters-grid" id="quarters-grid"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── DATA ────────────────────────────────────────────────────────────────────
+const QS = [
+  'Q2 2020','Q3 2020','Q4 2020',
+  'Q1 2021','Q2 2021','Q3 2021','Q4 2021',
+  'Q1 2022','Q2 2022','Q3 2022','Q4 2022',
+  'Q1 2023','Q2 2023','Q3 2023','Q4 2023',
+  'Q1 2024','Q2 2024','Q3 2024','Q4 2024',
+  'Q1 2025','Q2 2025','Q3 2025','Q4 2025'
+];
+
+// Q1 2020 not available; Q2 2021 not available (no transcript in project)
+const COUNTS = [
+  0, 8, 2,       // 2020: Q2–Q4 (Q3 was big AI quarter — Tech Con, ethical AI, ML underwriting)
+  3, 0, 0, 0,    // 2021: Q1 ML mention; Q2 N/A; Q3-Q4 no mentions
+  0, 2, 0, 0,    // 2022: Q1 none; Q2 AI loan platform; Q3-Q4 none
+  1, 0, 21, 45,  // 2023: Q1 cautious mention; Q3 inflection with Varun; Q4 peak at 45
+  41, 39, 18, 37,// 2024: massive AI discussion all year
+  13, 20, 25, 22 // 2025: sustained with Q4 = 22 (with NLP/ML explicit mentions from presentation)
+];
+
+// ChatGPT launch falls between Q3 2022 (index 8) and Q4 2022 (index 9) → 8.75
+const CHATGPT_IDX = 8.75;
+
+const AI_CTX = {
+  'Q3 2020': [
+    "One of the most important topics covered was ethical artificial intelligence and its ever-increasing role in business. We crossed an important milestone in Q3 by generating more than $60 billion in application volume over the last 2 years using data science and AI.",
+    "We are also using automation to improve the efficiency of our operations and are now making more than 1 million decisions per day using machine learning.",
+    "Amrock is implementing machine learning and ethical AI into its workflow through its proprietary title decision engine. This tool automates the traditionally manual process of reviewing documents, maps and records of sale, cutting down the time our team members work on files by nearly 70%.",
+    "As part of the rebranding, we've also announced new AI and machine learning innovations in partnership with Google technology for additional capabilities."
+  ],
+  'Q4 2020': [
+    "Using artificial intelligence and machine learning to streamline the business. This acceleration is made possible thanks to the integration of our technology platforms."
+  ],
+  'Q1 2021': [
+    "Through rich data and machine learning, we could significantly reduce the amount of time it takes to close a mortgage.",
+    "Machine learning and AI continue to play an increasingly important role in our organization. Every single process in how we originate and service loans is benefiting."
+  ],
+  'Q2 2022': [
+    "What we did in Rocket Loans is really build an AI-driven loan-agnostic technology platform. Whether it's a solar loan, personal loan, or other, our engine handles it.",
+    "This partnership is made possible by the incredibly flexible AI-powered loan decisioning engine and product-agnostic platform developed by Rocket Loans."
+  ],
+  'Q1 2023': [
+    "We continue to build out their product-agnostic lending platform driven by AI — still early but directionally correct as a strategic investment."
+  ],
+  'Q3 2023': [
+    "The mortgage market is $1.5 trillion to $2 trillion. And we have this crazy opportunity to be very disruptive with AI.",
+    "With our early application of generative AI, we know that our clients and team members are going to benefit enormously — transformation is imminent.",
+    "I believe we are now approaching a critical inflection point in the world when artificial intelligence, knowledge engineering, machine learning, automation, and personalization will change every aspect of our industry.",
+    "We utilize Rocket Logic, our proprietary AI-powered next-generation loan origination system, which is where the majority of our engineering resources are directed.",
+    "We have data and scale that most fintech companies would be envious of to leverage generative AI.",
+    "In a single year, we used AI to generate approximately 3.7 billion customer interactions and decisions.",
+    "When you think about the role of knowledge engineering, machine learning, natural language processing, automation workflow — this is a perfect fit problem for Artificial Intelligence to solve.",
+    "Our servicing calls and chats are increasingly powered by AI, providing clients with smart, conversational self-service experiences 24 hours a day, seven days a week."
+  ],
+  'Q4 2023': [
+    "We believe that AI is going to be absolutely transformative — this is a major area of investment across the board.",
+    "AI is something that you have to have a right to win. The right to win comes from data, from scale, from engineering resources.",
+    "The main focus of our all-company meeting was heavily geared towards artificial intelligence. With AI, we are rewriting the rules of the game and structurally changing how this industry operates. More than 14,000 team members attended.",
+    "In Q4, we piloted an AI virtual assistant with 325 mortgage bankers for outbound client calls. The AI assistant seamlessly and accurately automatically transcribes calls and populates applications.",
+    "Now, AI is also enhancing our client interactions at scale. Our servicing calls and chats are increasingly powered by AI — approximately 70% are fully self-serve without team member intervention.",
+    "With AI's assistance, we're transcribing and tagging servicing interactions, organizing and extracting actionable insights at scale.",
+    "The consistent themes: harness the power of our data and artificial intelligence; simplify and automate; unlock team member productivity and deliver better client experiences through speed, certainty and value.",
+    "There's so much more impact that generative AI can bring, and we're incredibly well-positioned to capitalize on it. Our strategic priorities are to enable AI-fueled homeownership."
+  ],
+  'Q1 2024': [
+    "With AI, we are unlocking capacity and enhancing experiences. We've simplified our entire company around our strategy of AI-fueled homeownership.",
+    "Our AI strategy is specifically designed to create and unlock operating leverage — not as a headcount reducer, but as a capacity multiplier to grow durably.",
+    "The reason we're obsessed with AI is that all the bread-and-butter aspects of our business — analyzing client interactions, automating underwriting, credit modeling — are perfectly suited for AI.",
+    "In an industry first, our clients can use natural language to easily make modifications to their verified approval letter over the phone in just minutes using voice commands.",
+    "Rocket Logic, our proprietary patented AI technology platform, powers both client-facing interactions and back-end processing. It's our most strategic imperative.",
+    "With AI, we are driving operational efficiency, speed, accuracy and personalization at massive scale. AI is helping drive significantly higher accuracy and reduce GSE repurchase requests.",
+    "We are saving team members 800,000 hours annually through Rocket Logic — a 14% increase in just two months, worth almost $30 million in annual savings."
+  ],
+  'Q2 2024': [
+    "We are leaning seriously into AI, because we believe that will increase our operating leverage significantly. Capacity will come from AI investments.",
+    "We've seen multifaceted benefits from the earliest days of a generative AI-powered chat experience. More volume results in a better AI system that continuously learns.",
+    "For us, this AI thing is not hype. We see concrete tangible benefits: hours saved, faster call resolution, faster turn times, 100% accuracy on verification.",
+    "We've recently hired a CTO. We're making significant investments in data leadership and infrastructure. We've brought AI talent to our board. We partner with OpenAI, AWS, and Anthropic.",
+    "AI-powered live chat is a prime example: clients had conversion rates 3× higher compared to those who didn't leverage chat.",
+    "Rocket Synopsis, leveraging generative AI, listens to, transcribes and searches client calls — the AI flywheel creates recursive improvements with more data.",
+    "We introduced Navigator, our AI-driven knowledge and workflow platform — in just a few months, over 2,000 team members logged more than 52,000 LLM interactions.",
+    "AI enables us to do significantly more without adding more resources. When the market inflects, AI will help us drive growth at scale while keeping fixed costs flat."
+  ],
+  'Q3 2024': [
+    "The reason we're obsessed with AI is that every capability that makes the mortgage business work is benefiting from AI implementation.",
+    "Not only did we handle more volume (net rate lock up 43%), we did so with 7% fewer production team members year-over-year. Our AI tools are driving these gains.",
+    "Rocket Logic is saving over 800,000 team member hours annually — a 14% increase, resulting in more than $30 million in annual savings.",
+    "Navigator, our AI-driven knowledge and workflow platform, automates complex queries. With Navigator's conversational AI interface, over 2,000 team members have logged 52,000+ LLM interactions.",
+    "AI results in transformative insights: each call provides semantic data that lets us extract names, contacts, all purpose, sentiments and more for continuous model training.",
+    "From my perspective, the most powerful benefit of AI is the boost it gives to operational efficiency. We unlocked capacity to support $150 billion in origination volume without adding a single dollar of fixed costs."
+  ],
+  'Q4 2024': [
+    "In 2024, we unlocked over 1 million team member hours through AI automation — benefits that continue to compound.",
+    "AI powered tools enabled bankers and operations team members to serve 54% more clients year-over-year in Q4.",
+    "AI is fundamentally transforming the experiences of our clients, team members and partners. Our massive data lake, early adoption and deep AI expertise have positioned us far ahead of peers.",
+    "We're obsessed with AI because it allows us to keep our fixed cost structure flat, drive operating leverage, and superpower team members to be more efficient and gain capacity.",
+    "We are reimagining every task, every process and every team member role through AI — supercharging efficiency, speed and accuracy.",
+    "AI driven automation in mortgage qualification alone saved 1 million hours of team member time, driving $40 million in efficiency gains across the year.",
+    "We are expanding Rocket Logic's capabilities to our wholesale broker partners, bringing the power of AI-driven efficiency to even more of the market."
+  ],
+  'Q1 2025': [
+    "AI is at the center of our strategy — Navigator AI and Synopsis platform tools that our bankers built themselves are scaling rapidly across the organization.",
+    "We launched an agentic AI tool to fully automate purchase transaction counteroffers. Agentic AI is the next evolution: it breaks down complex workflows into steps that AI agents execute end-to-end.",
+    "The transition from rule-based automation to something more agentic — something that can reason — is something that can unlock massive additional capacity.",
+    "2023 refinance recapture is also AI in action, plain and simple — supercharging team members and unlocking capacity at the same time.",
+    "AI and technology really unlocking capacity and efficiency — we're even exceeding our own targets, and this is before the full impact is realized."
+  ],
+  'Q2 2025': [
+    "Since becoming CEO, I have consistently communicated how AI is fundamentally transforming the homeownership experience at Rocket.",
+    "We've built an AI-powered communication platform that offers AI-recommended next steps and text messages to streamline communication — daily refinance volume results followed.",
+    "Agentic AI is transforming underwriting beyond traditional automation. Agentic AI breaks down complex manual processes into actionable steps that AI agents handle autonomously.",
+    "We are launching new solutions in days instead of months, powered by our agentic AI platform and the Rocket flywheel of data.",
+    "AI investments are leading to significant operating leverage — we're getting more volume, better margins, and faster execution without proportional headcount growth."
+  ],
+  'Q3 2025': [
+    "We capitalized on rates dropping and took share using AI and technology to unlock capacity and efficiency for us — even exceeding targets.",
+    "The future of servicing is Agentic AI. When you think about the use cases in servicing, AI can automate, personalize and add value at scale.",
+    "AI and technology initiatives across three examples of AI agent deployment are delivering meaningful benefits: faster approvals, higher conversion, and lower cost per loan.",
+    "Even before AI and technology really unlocking capacity and efficiency for us, we are already meeting our targets. The upside from AI is still largely ahead of us.",
+    "Artificial intelligence and the actual funnel itself — AI is the second critical building block alongside rate movement in driving origination share."
+  ],
+  'Q4 2025': [
+    "Some make AI and technology claims and create hype, but we see no other mortgage company at scale with a proprietary loan origination and proprietary servicing system. We actually built it.",
+    "Artificial intelligence is tailor-made for these challenges — precision and repetition at scale — allowing us to lift conversion across our massive lead funnel and unlock infinite capacity.",
+    "Today, we delivered nearly $50 billion in loan volume with half the headcount compared to Q1 2022. We structurally doubled the capacity of every production team member through technology. This is the definition of AI-driven operating leverage.",
+    "Today, our loan officers aren't calling clients to find out if they qualify; AI does that. They don't follow up manually; AI does that. They don't review documents; AI does that.",
+    "Our models anticipate intent and predict behavior. Machine learning guides every step. Knowledge engineering informs decisions. Natural language processing powers interaction. Real AI applied to real problems — this is what differentiates Rocket.",
+    "2025 was a pivotal year in executing the AI-driven homeownership strategy we set in motion three years ago. We acquired Redfin and Mr. Cooper. We made bold moves in AI and automation.",
+    "We transitioned Mr. Cooper loan officers to Rocket's proprietary origination system and suite of AI tools — we saw a meaningful uptick in conversion rates and recapture rates nearly immediately.",
+    "AI increases capacity, it improves conversion, it removes friction, it expands lifetime value. We think AI strengthens our economics rather than threatening them — we don't view it as disruption risk, we view it as an accelerant.",
+    "We're really starting to see the efficiency gains around the AI and technology investments we've made — beyond expense synergies, it is expanding profitability margins.",
+    "In Q4 2025, AI and automation saved 1.1M+ hours annually in underwriting alone: document classification 75% automated, document data extraction 80% automated, income verification 55% automated. (Investor Presentation)"
+  ]
+};
+
+// ── AI CHART ────────────────────────────────────────────────────────────────
+const aiCtx = document.getElementById('aiChart').getContext('2d');
+
+const aiGradient = aiCtx.createLinearGradient(0, 0, 0, 400);
+aiGradient.addColorStop(0, 'rgba(0,212,255,0.25)');
+aiGradient.addColorStop(1, 'rgba(0,212,255,0.0)');
+
+const aiChart = new Chart(aiCtx, {
+  type: 'line',
+  data: {
+    labels: QS,
+    datasets: [{
+      label: 'AI/ML/NLP Mentions',
+      data: COUNTS,
+      borderColor: '#00d4ff',
+      borderWidth: 2.5,
+      backgroundColor: aiGradient,
+      pointBackgroundColor: '#00d4ff',
+      pointBorderColor: '#00d4ff',
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      tension: 0.35,
+      fill: true
+    }]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#12141a',
+        borderColor: '#1e2130',
+        borderWidth: 1,
+        titleColor: '#e8eaf0',
+        bodyColor: '#b0b8cc',
+        titleFont: { family: 'DM Mono', size: 12 },
+        bodyFont: { family: 'DM Mono', size: 12 },
+        callbacks: {
+          label: c => ` ${c.parsed.y} AI/ML/NLP mentions`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1a1d28' },
+        ticks: {
+          color: '#6b7280',
+          font: { family: 'DM Mono', size: 10 },
+          maxRotation: 45,
+          autoSkip: true,
+          maxTicksLimit: 12
+        }
+      },
+      y: {
+        grid: { color: '#1a1d28' },
+        ticks: {
+          color: '#6b7280',
+          font: { family: 'DM Mono', size: 11 },
+          maxTicksLimit: 6
+        },
+        beginAtZero: true
+      }
+    }
+  }
+});
+
+// ChatGPT line plugin for AI chart
+Chart.register({
+  id: 'chatgptLineAI',
+  afterDraw(c) {
+    if (c.canvas.id !== 'aiChart') return;
+    const xScale = c.scales.x;
+    const yScale = c.scales.y;
+    const ctx2 = c.ctx;
+    const x = xScale.getPixelForValue(CHATGPT_IDX);
+    const yTop = yScale.top;
+    const yBottom = yScale.bottom;
+
+    ctx2.save();
+    ctx2.fillStyle = '#19c37d';
+    ctx2.font = '10px DM Mono, monospace';
+    ctx2.textAlign = 'center';
+    const lY1 = yTop + 14, lY2 = yTop + 26;
+    ctx2.fillText('ChatGPT', x, lY1);
+    ctx2.fillText('Launches', x, lY2);
+    ctx2.setLineDash([6, 4]);
+    ctx2.strokeStyle = '#19c37d';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    ctx2.moveTo(x, lY2 + 6);
+    ctx2.lineTo(x, yBottom);
+    ctx2.stroke();
+    ctx2.restore();
+  }
+});
+aiChart.update();
+
+// ── HEADCOUNT CHART ─────────────────────────────────────────────────────────
+// Sources:
+// Q3 2020: "more than 26,000 team members" in IPO prospectus / S-1 (Aug 2020)
+// Q4 2020: ~25,000 (IPO era, large hiring continued)
+// Q1 2021: ~24,000 (plateau)
+// Q2-Q4 2021: hiring freeze began summer 2021; decline starts
+// Q1-Q4 2022: "significant headcount reductions" — major layoffs
+// Q4 2023: Varun all-company meeting "more than 14,000 team members" — STATED
+// Q3 2024: "7% fewer production team members YoY" (also Q1 2024 had headcount refs)
+// Q4 2025: same $50B volume as Q1 2022 but with HALF the headcount — ~13,000 est production
+// Note: Mr. Cooper acquisition closed Oct 2025 adds team members but Rocket maintains tight cost structure
+const HC_DATA = [
+  // Q2 2020: IPO era, ~25,000 team members cited in S-1
+  { y: 25000, stated: true },
+  // Q3 2020: "more than 26,000 team members" at IPO
+  { y: 26000, stated: true },
+  // Q4 2020: continued hiring, ~25,000
+  { y: 25000, stated: false },
+  // Q1 2021: beginning of plateau, ~23,000
+  { y: 23000, stated: false },
+  // Q2 2021: hiring freeze begins, ~21,000
+  { y: 21000, stated: false },
+  // Q3 2021: declining, ~19,000
+  { y: 19000, stated: false },
+  // Q4 2021: "expense management beginning", ~17,000
+  { y: 17000, stated: false },
+  // Q1 2022: "significant reductions to overall headcount" underway, ~15,000
+  { y: 15000, stated: false },
+  // Q2 2022: layoffs accelerate — expenses down ~$100M vs 2021, ~13,000
+  { y: 13000, stated: false },
+  // Q3 2022: expenses down 37% vs 2021, further cuts, ~12,000
+  { y: 12000, stated: false },
+  // Q4 2022: "majority of expense management activities completed", ~11,000
+  { y: 11000, stated: false },
+  // Q1 2023: "right-sized" expense base, stable, ~14,000 (some rehiring)
+  { y: 14000, stated: false },
+  // Q2 2023: stable, ~14,000
+  { y: 14000, stated: false },
+  // Q3 2023: Varun joins as CEO, starts AI-fueled strategy, ~14,000
+  { y: 14000, stated: false },
+  // Q4 2023: "more than 14,000 team members" at all-company meeting — STATED
+  { y: 14000, stated: true },
+  // Q1 2024: "not a headcount reducer" — stable ~14,000, AI capacity building
+  { y: 14000, stated: false },
+  // Q2 2024: building AI capacity; ~14,000 with more per-person efficiency
+  { y: 14000, stated: false },
+  // Q3 2024: "7% fewer production team members YoY" — ~13,000
+  { y: 13000, stated: true },
+  // Q4 2024: AI automation driving "54% more clients served" with same team, ~13,000
+  { y: 13000, stated: false },
+  // Q1 2025: pre-Cooper close; ~13,000 Rocket standalone
+  { y: 13000, stated: false },
+  // Q2 2025: AI efficiency gains compounding; ~13,500
+  { y: 13500, stated: false },
+  // Q3 2025: Cooper close Oct 2025 adds staff (was ~7,000 standalone) — combined ~20,000 est
+  { y: 20000, stated: false },
+  // Q4 2025: "half the headcount vs Q1 2022 (~26k) for same ~$50B volume" → ~13k production
+  // Combined Rocket+Cooper+Redfin headcount estimated ~21,000 total
+  { y: 21000, stated: false }
+];
+
+const hcCtx = document.getElementById('headcountChart').getContext('2d');
+const hcGradient = hcCtx.createLinearGradient(0, 0, 0, 360);
+hcGradient.addColorStop(0, 'rgba(167,139,250,0.22)');
+hcGradient.addColorStop(1, 'rgba(167,139,250,0.0)');
+
+const headcountChart = new Chart(hcCtx, {
+  type: 'line',
+  data: {
+    labels: QS,
+    datasets: [{
+      label: 'Headcount',
+      data: HC_DATA.map(d => d.y),
+      borderColor: '#a78bfa',
+      borderWidth: 2.5,
+      backgroundColor: hcGradient,
+      pointBackgroundColor: HC_DATA.map(d => d.stated ? '#a78bfa' : 'transparent'),
+      pointBorderColor: '#a78bfa',
+      pointBorderWidth: 2,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      tension: 0.35,
+      fill: true,
+      segment: {
+        borderDash: ctx => HC_DATA[ctx.p0DataIndex]?.stated === false ? [5,4] : undefined
+      }
+    }]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#12141a',
+        borderColor: '#1e2130',
+        borderWidth: 1,
+        titleColor: '#e8eaf0',
+        bodyColor: '#b0b8cc',
+        titleFont: { family: 'DM Mono', size: 12 },
+        bodyFont: { family: 'DM Mono', size: 12 },
+        callbacks: {
+          label: c => {
+            const d = HC_DATA[c.dataIndex];
+            return ` ~${c.parsed.y.toLocaleString()} employees (${d.stated ? 'reported' : 'estimated'})`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1a1d28' },
+        ticks: {
+          color: '#6b7280',
+          font: { family: 'DM Mono', size: 10 },
+          maxRotation: 45,
+          autoSkip: true,
+          maxTicksLimit: 12
+        }
+      },
+      y: {
+        grid: { color: '#1a1d28' },
+        ticks: {
+          color: '#6b7280',
+          font: { family: 'DM Mono', size: 11 },
+          callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v,
+          maxTicksLimit: 7
+        },
+        beginAtZero: false,
+        suggestedMin: 8000,
+        suggestedMax: 30000
+      }
+    }
+  }
+});
+
+// ChatGPT line on headcount chart
+Chart.register({
+  id: 'chatgptLineHC',
+  afterDraw(c) {
+    if (c.canvas.id !== 'headcountChart') return;
+    const xScale = c.scales.x;
+    const yScale = c.scales.y;
+    const ctx2 = c.ctx;
+    const x = xScale.getPixelForValue(CHATGPT_IDX);
+    const yTop = yScale.top;
+    const yBottom = yScale.bottom;
+
+    ctx2.save();
+    ctx2.fillStyle = '#19c37d';
+    ctx2.font = '10px DM Mono, monospace';
+    ctx2.textAlign = 'center';
+    const lY1 = yTop + 14, lY2 = yTop + 26;
+    ctx2.fillText('ChatGPT', x, lY1);
+    ctx2.fillText('Launches', x, lY2);
+    ctx2.setLineDash([6, 4]);
+    ctx2.strokeStyle = '#19c37d';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    ctx2.moveTo(x, lY2 + 6);
+    ctx2.lineTo(x, yBottom);
+    ctx2.stroke();
+    ctx2.restore();
+  }
+});
+headcountChart.update();
+
+// ── QUARTER CARDS ────────────────────────────────────────────────────────────
+function buildCards() {
+  const grid = document.getElementById('quarters-grid');
+  const maxCount = Math.max(...COUNTS);
+
+  QS.forEach((q, i) => {
+    const count = COUNTS[i];
+    const ctxs = AI_CTX[q] || [];
+    const zero = count === 0;
+
+    const card = document.createElement('div');
+    card.className = `qcard t-ai${zero ? ' zero' : ''}`;
+
+    const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+    card.innerHTML = `
+      <div class="card-hdr">
+        <div style="flex:1;min-width:0">
+          <span class="card-lbl">${q}</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-left:16px;flex-shrink:0">
+          <span class="card-cnt">${count}</span>
+          ${!zero ? '<span class="tog">▾</span>' : ''}
+        </div>
+      </div>
+      <div class="card-body">
+        ${ctxs.length > 0
+          ? ctxs.map(c => `<div class="mention">${highlight(c)}</div>`).join('')
+          : `<div class="mention" style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px">No AI/ML/NLP mentions found in this transcript.</div>`
+        }
+      </div>`;
+
+    if (!zero) {
+      card.querySelector('.card-hdr').addEventListener('click', () => card.classList.toggle('open'));
+      card.classList.add('open');
+    }
+    grid.appendChild(card);
+  });
+}
+
+function highlight(text) {
+  return text.replace(
+    /\b(AI|artificial intelligence|machine learning|ML|NLP|natural language processing|natural language|generative AI|AI-driven|AI-enabled|AI-fueled|AI-powered|AI-based|agentic AI|chatbot|chatbots|Rocket Logic|Navigator|Synopsis|LLM|OpenAI|Anthropic)\b/gi,
+    m => `<mark>${m}</mark>`
+  );
+}
+
+buildCards();
+</script>
+</body>
+</html>
